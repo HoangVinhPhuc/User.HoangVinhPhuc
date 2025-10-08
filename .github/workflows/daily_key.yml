@@ -48,21 +48,14 @@ jobs:
         PLAINTEXT_JSON="{\"key\":\"$RAW_KEY\",\"date\":\"$TOMORROW\",\"short_url\":\"$SHORT_URL\"}"
 
         # --- BẮT ĐẦU MÃ HÓA DỮ LIỆU ---
-        # Tạo một IV (Initialization Vector) ngẫu nhiên, cần thiết cho việc giải mã
         IV=$(openssl rand -hex 16)
-        
-        # Mã hóa dữ liệu JSON bằng thuật toán AES-256-CBC, sau đó encode Base64
-        # Openssl yêu cầu key và iv phải ở dạng hex
         HEX_KEY=$(echo -n "$SECRET_KEY" | xxd -p -c 256)
-
-        # =================================================================================
-        # THAY ĐỔI DUY NHẤT: Thêm cờ '-A' ở cuối lệnh openssl để ngăn nó xuống dòng
         ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64 -A)
-        # =================================================================================
         
-        # Tạo file JSON cuối cùng với dữ liệu đã được mã hóa và IV
-        echo "{\"data\":\"$ENCRYPTED_DATA\",\"iv\":\"$IV\"}" > daily-key_comment.json
-        # --- KẾT THÚC MÃ HÓA ---
+        # =================================================================================
+        # THAY ĐỔI CUỐI CÙNG: Thêm dấu nháy đơn (') để đảm bảo toàn bộ chuỗi là một khối duy nhất
+        echo '{"data":"'$ENCRYPTED_DATA'","iv":"'$IV'"}' > daily-key_comment.json
+        # =================================================================================
 
         # Commit và push file đã mã hóa lên repo
         git config user.name "github-actions"
