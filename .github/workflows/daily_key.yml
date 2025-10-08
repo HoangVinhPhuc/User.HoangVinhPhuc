@@ -54,10 +54,13 @@ jobs:
         # Mã hóa dữ liệu JSON bằng thuật toán AES-256-CBC, sau đó encode Base64
         # Openssl yêu cầu key và iv phải ở dạng hex
         HEX_KEY=$(echo -n "$SECRET_KEY" | xxd -p -c 256)
-        ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64)
+
+        # =================================================================================
+        # THAY ĐỔI DUY NHẤT: Thêm cờ '-A' ở cuối lệnh openssl để ngăn nó xuống dòng
+        ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64 -A)
+        # =================================================================================
         
         # Tạo file JSON cuối cùng với dữ liệu đã được mã hóa và IV
-        # IV không cần phải giữ bí mật, nhưng bắt buộc phải có để giải mã
         echo "{\"data\":\"$ENCRYPTED_DATA\",\"iv\":\"$IV\"}" > daily-key_comment.json
         # --- KẾT THÚC MÃ HÓA ---
 
