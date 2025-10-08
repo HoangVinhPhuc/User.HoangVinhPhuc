@@ -1,0 +1,69 @@
+name: 🔑 Generate Secure Daily Key
+
+on:
+  schedule:
+    - cron: '0 16 * * *'  # 16:00 UTC = 23:00 VN
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-key:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Generate and Encrypt Daily Data
+      run: |
+        # Lấy secret key từ GitHub Secrets
+        SECRET_KEY="${{ secrets.AES_SECRET_KEY }}"
+        if [ -z "$SECRET_KEY" ]; then
+          echo "Lỗi: Biến AES_SECRET_KEY chưa được thiết lập trong GitHub Secrets!"
+          exit 1
+        fi
+        
+        # Tạo key cho NGÀY MAI (theo giờ Việt Nam)
+        TOMORROW=$(date -d "+1 day" +%Y%m%d)
+        RAW_KEY="comment_${TOMORROW}_$(openssl rand -hex 6 | tr '[:lower:]' '[:upper:]')"
+        
+        # Lấy link từ một dịch vụ pastebin (ví dụ: paste.ee)
+        PASTE_RESPONSE=$(curl -s -X POST "https://api.paste.ee/v1/pastes" \
+          -H "Content-Type: application/json" \
+          -d "{\"sections\":[{\"contents\":\"$RAW_KEY\"}]}")
+        PASTE_URL=$(echo "$PASTE_RESPONSE" | grep -o '"link":"[^"]*' | cut -d'"' -f4)
+        
+        # Fallback nếu pastebin lỗi
+        if [ -z "$PASTE_URL" ]; then
+          PASTE_URL="https://www.google.com/search?q=$RAW_KEY"
+        fi
+        
+        # Rút gọn link (API của bạn)
+        RESPONSE=$(curl -s "https://link4m.co/api-shorten/v2?api=68db842cd32fc747763d594d&url=$PASTE_URL")
+        SHORT_URL=$(echo "$RESPONSE" | grep -o '"shortenedUrl":"[^"]*' | cut -d'"' -f4)
+
+        # Chuẩn bị dữ liệu JSON ở dạng text thường
+        PLAINTEXT_JSON="{\"key\":\"$RAW_KEY\",\"date\":\"$TOMORROW\",\"short_url\":\"$SHORT_URL\"}"
+
+        # --- BẮT ĐẦU MÃ HÓA DỮ LIỆU ---
+        # Tạo một IV (Initialization Vector) ngẫu nhiên, cần thiết cho việc giải mã
+        IV=$(openssl rand -hex 16)
+        
+        # Mã hóa dữ liệu JSON bằng thuật toán AES-256-CBC, sau đó encode Base64
+        # Openssl yêu cầu key và iv phải ở dạng hex
+        HEX_KEY=$(echo -n "$SECRET_KEY" | xxd -p -c 256)
+        ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64)
+        
+        # Tạo file JSON cuối cùng với dữ liệu đã được mã hóa và IV
+        # IV không cần phải giữ bí mật, nhưng bắt buộc phải có để giải mã
+        echo "{\"data\":\"$ENCRYPTED_DATA\",\"iv\":\"$IV\"}" > daily-key_comment.json
+        # --- KẾT THÚC MÃ HÓA ---
+
+        # Commit và push file đã mã hóa lên repo
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add daily-key_comment.json
+        git commit -m "Auto: Encrypted daily key for $TOMORROW"
+        git push
