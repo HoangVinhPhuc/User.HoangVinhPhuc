@@ -27,7 +27,7 @@ jobs:
         fi
         
         # Key được bắt đầu bằng "vphuc_"
-        TOMORROW=$(date +%Y%m%d)
+        TOMORROW=$(date -d "+1 day" +%Y%m%d)
         RAW_KEY="vphuc_${TOMORROW}_$(openssl rand -hex 6 | tr '[:lower:]' '[:upper:]')"
         
         # Tạo link Google trực tiếp
