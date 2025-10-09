@@ -26,7 +26,7 @@ jobs:
           exit 1
         fi
         
-        # Tạo key cho NGÀY MAI (theo giờ Việt Nam)
+        # THAY ĐỔI 1: Key bắt đầu bằng "vphuc_"
         TOMORROW=$(date +%Y%m%d)
         RAW_KEY="vphuc_${TOMORROW}_$(openssl rand -hex 6 | tr '[:lower:]' '[:upper:]')"
         
@@ -36,41 +36,40 @@ jobs:
           -d "{\"sections\":[{\"contents\":\"$RAW_KEY\"}]}")
         PASTE_URL=$(echo "$PASTE_RESPONSE" | grep -o '"link":"[^"]*' | cut -d'"' -f4)
         
-        # Fallback nếu pastebin lỗi
+        # THAY ĐỔI 2: Xử lý lỗi nếu pastebin không thành công
         if [ -z "$PASTE_URL" ]; then
-          PASTE_URL="https://www.google.com/search?q=$RAW_KEY"
+          echo "Lỗi Tạo Key: Không thể tạo link trên paste.ee."
+          echo "Phản hồi từ API: $PASTE_RESPONSE"
+          exit 1
         fi
         
-        # --- THAY ĐỔI API TỪ LINK4M SANG YEUMONEY ---
+        # Rút gọn link qua API Yeumoney
         YEUMONEY_TOKEN="3d4f42d51d76e19546544bc715b3c65888005a6300d9f599a3f89183066b052f"
-        
-        # URL-encode cái link pastebin để đảm bảo nó hợp lệ
         ENCODED_PASTE_URL=$(echo "$PASTE_URL" | sed 's/&/%26/g; s/?/%3F/g; s/:/%3A/g; s/\//%2F/g')
-        
-        # Gọi API của Yeumoney
         RESPONSE=$(curl -s "https://yeumoney.com/QL_api.php?token=$YEUMONEY_TOKEN&url=$ENCODED_PASTE_URL")
-        
         SHORT_URL="$RESPONSE"
 
-        # Fallback nếu API rút gọn lỗi hoặc trả về chuỗi rác
-        if [ -z "$SHORT_URL" ] || [[ "$SHORT_URL" == *"error"* ]] || [[ "$SHORT_URL" == *"Error"* ]]; then
-          echo "Lỗi: Không rút gọn được link qua Yeumoney, dùng link gốc."
-          SHORT_URL=$PASTE_URL
+        # THAY ĐỔI 2 (tiếp): Xử lý lỗi nếu Yeumoney không thành công
+        if [ -z "$SHORT_URL" ] || [[ "$SHORT_URL" == *"error"* ]] || [[ "$SHORT_URL" == *"Error"* ]] || ! [[ "$SHORT_URL" == "http"* ]]; then
+          echo "Lỗi Tạo Key: Không thể rút gọn link qua Yeumoney."
+          echo "Phản hồi từ API: $RESPONSE"
+          exit 1
         fi
         
-        # Chuẩn bị dữ liệu JSON ở dạng text thường
+        # Chuẩn bị dữ liệu JSON
         PLAINTEXT_JSON="{\"key\":\"$RAW_KEY\",\"date\":\"$TOMORROW\",\"short_url\":\"$SHORT_URL\"}"
 
-        # --- BẮT ĐẦU MÃ HÓA DỮ LIỆU ---
+        # Mã hóa dữ liệu
         IV=$(openssl rand -hex 16)
         HEX_KEY=$(echo -n "$SECRET_KEY" | xxd -p -c 256)
         ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64 -A)
         
+        # THAY ĐỔI 3: Xuất ra file "daily-key.json"
         echo '{"data":"'$ENCRYPTED_DATA'","iv":"'$IV'"}' > daily-key.json
 
         # Commit và push file đã mã hóa lên repo
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
         git add daily-key.json
         git commit -m "Auto: Encrypted daily key for $TOMORROW"
         git push
