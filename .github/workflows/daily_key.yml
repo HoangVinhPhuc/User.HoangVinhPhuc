@@ -26,30 +26,21 @@ jobs:
           exit 1
         fi
         
-        # THAY ĐỔI 1: Key bắt đầu bằng "vphuc_"
+        # Key được bắt đầu bằng "vphuc_"
         TOMORROW=$(date +%Y%m%d)
         RAW_KEY="vphuc_${TOMORROW}_$(openssl rand -hex 6 | tr '[:lower:]' '[:upper:]')"
         
-        # Lấy link từ một dịch vụ pastebin (ví dụ: paste.ee)
-        PASTE_RESPONSE=$(curl -s -X POST "https://api.paste.ee/v1/pastes" \
-          -H "Content-Type: application/json" \
-          -d "{\"sections\":[{\"contents\":\"$RAW_KEY\"}]}")
-        PASTE_URL=$(echo "$PASTE_RESPONSE" | grep -o '"link":"[^"]*' | cut -d'"' -f4)
-        
-        # THAY ĐỔI 2: Xử lý lỗi nếu pastebin không thành công
-        if [ -z "$PASTE_URL" ]; then
-          echo "Lỗi Tạo Key: Không thể tạo link trên paste.ee."
-          echo "Phản hồi từ API: $PASTE_RESPONSE"
-          exit 1
-        fi
+        # THAY ĐỔI: Bỏ qua bước paste.ee, tạo link Google trực tiếp
+        # Thao tác này giúp loại bỏ điểm lỗi từ API của paste.ee
+        TARGET_URL="https://www.google.com/search?q=$RAW_KEY"
         
         # Rút gọn link qua API Yeumoney
         YEUMONEY_TOKEN="3d4f42d51d76e19546544bc715b3c65888005a6300d9f599a3f89183066b052f"
-        ENCODED_PASTE_URL=$(echo "$PASTE_URL" | sed 's/&/%26/g; s/?/%3F/g; s/:/%3A/g; s/\//%2F/g')
-        RESPONSE=$(curl -s "https://yeumoney.com/QL_api.php?token=$YEUMONEY_TOKEN&url=$ENCODED_PASTE_URL")
+        ENCODED_URL=$(echo "$TARGET_URL" | sed 's/&/%26/g; s/?/%3F/g; s/:/%3A/g; s/\//%2F/g')
+        RESPONSE=$(curl -s "https://yeumoney.com/QL_api.php?token=$YEUMONEY_TOKEN&url=$ENCODED_URL")
         SHORT_URL="$RESPONSE"
 
-        # THAY ĐỔI 2 (tiếp): Xử lý lỗi nếu Yeumoney không thành công
+        # Xử lý lỗi nếu Yeumoney không thành công
         if [ -z "$SHORT_URL" ] || [[ "$SHORT_URL" == *"error"* ]] || [[ "$SHORT_URL" == *"Error"* ]] || ! [[ "$SHORT_URL" == "http"* ]]; then
           echo "Lỗi Tạo Key: Không thể rút gọn link qua Yeumoney."
           echo "Phản hồi từ API: $RESPONSE"
@@ -64,7 +55,7 @@ jobs:
         HEX_KEY=$(echo -n "$SECRET_KEY" | xxd -p -c 256)
         ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64 -A)
         
-        # THAY ĐỔI 3: Xuất ra file "daily-key.json"
+        # Xuất ra file "daily-key.json"
         echo '{"data":"'$ENCRYPTED_DATA'","iv":"'$IV'"}' > daily-key.json
 
         # Commit và push file đã mã hóa lên repo
