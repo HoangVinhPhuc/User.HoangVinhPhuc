@@ -30,20 +30,21 @@ jobs:
         TOMORROW=$(date +%Y%m%d)
         RAW_KEY="vphuc_${TOMORROW}_$(openssl rand -hex 6 | tr '[:lower:]' '[:upper:]')"
         
-        # THAY ĐỔI: Bỏ qua bước paste.ee, tạo link Google trực tiếp
-        # Thao tác này giúp loại bỏ điểm lỗi từ API của paste.ee
+        # Tạo link Google trực tiếp
         TARGET_URL="https://www.google.com/search?q=$RAW_KEY"
         
-        # Rút gọn link qua API Yeumoney
+        # Rút gọn link qua API Yeumoney với định dạng TEXT
         YEUMONEY_TOKEN="3d4f42d51d76e19546544bc715b3c65888005a6300d9f599a3f89183066b052f"
         ENCODED_URL=$(echo "$TARGET_URL" | sed 's/&/%26/g; s/?/%3F/g; s/:/%3A/g; s/\//%2F/g')
-        RESPONSE=$(curl -s "https://yeumoney.com/QL_api.php?token=$YEUMONEY_TOKEN&url=$ENCODED_URL")
+        
+        # THAY ĐỔI: Thêm &format=text vào URL
+        RESPONSE=$(curl -s "https://yeumoney.com/QL_api.php?token=$YEUMONEY_TOKEN&format=text&url=$ENCODED_URL")
         SHORT_URL="$RESPONSE"
 
-        # Xử lý lỗi nếu Yeumoney không thành công
-        if [ -z "$SHORT_URL" ] || [[ "$SHORT_URL" == *"error"* ]] || [[ "$SHORT_URL" == *"Error"* ]] || ! [[ "$SHORT_URL" == "http"* ]]; then
+        # Xử lý lỗi nếu Yeumoney không thành công (trả về chuỗi rỗng)
+        if [ -z "$SHORT_URL" ] || ! [[ "$SHORT_URL" == "http"* ]]; then
           echo "Lỗi Tạo Key: Không thể rút gọn link qua Yeumoney."
-          echo "Phản hồi từ API: $RESPONSE"
+          echo "Phản hồi từ API (có thể rỗng): $RESPONSE"
           exit 1
         fi
         
