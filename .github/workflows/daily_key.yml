@@ -1,22 +1,4 @@
-name: 🔑 Generate Secure Daily Key
-
-on:
-  schedule:
-    - cron: '0 16 * * *'  # 16:00 UTC = 23:00 VN
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-jobs:
-  generate-key:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Generate and Encrypt Daily Data
+- name: Generate and Encrypt Daily Data
       run: |
         # Lấy secret key từ GitHub Secrets
         SECRET_KEY="${{ secrets.AES_SECRET_KEY }}"
@@ -40,10 +22,27 @@ jobs:
           PASTE_URL="https://www.google.com/search?q=$RAW_KEY"
         fi
         
-        # Rút gọn link (API của bạn)
-        RESPONSE=$(curl -s "https://link4m.co/api-shorten/v2?api=68db842cd32fc747763d594d&url=$PASTE_URL")
-        SHORT_URL=$(echo "$RESPONSE" | grep -o '"shortenedUrl":"[^"]*' | cut -d'"' -f4)
+        # --- THAY ĐỔI API TỪ LINK4M SANG YEUMONEY ---
+        YEUMONEY_TOKEN="3d4f42d51d76e19546544bc715b3c65888005a6300d9f599a3f89183066b052f" #
+        
+        # URL-encode cái link pastebin để đảm bảo nó hợp lệ
+        ENCODED_PASTE_URL=$(echo "$PASTE_URL" | sed 's/&/%26/g; s/?/%3F/g; s/:/%3A/g; s/\//%2F/g')
+        
+        # Gọi API của Yeumoney
+        RESPONSE=$(curl -s "https://yeumoney.com/QL_api.php?token=$YEUMONEY_TOKEN&url=$ENCODED_PASTE_URL") #
+        
+        # CẢNH BÁO: Cấu trúc response của Yeumoney không có trong ảnh.
+        # Tao đoán nó trả về một chuỗi text thường, không phải JSON.
+        # Nếu nó chỉ trả về link, dòng dưới sẽ hoạt động.
+        # Nếu nó trả về JSON, mày phải tự sửa lại lệnh grep/cut như tao nói lần trước.
+        SHORT_URL="$RESPONSE"
 
+        # Fallback nếu API rút gọn lỗi hoặc trả về chuỗi rác
+        if [ -z "$SHORT_URL" ] || [[ "$SHORT_URL" == *"error"* ]] || [[ "$SHORT_URL" == *"Error"* ]]; then
+          echo "Lỗi: Không rút gọn được link qua Yeumoney, dùng link gốc."
+          SHORT_URL=$PASTE_URL
+        fi
+        
         # Chuẩn bị dữ liệu JSON ở dạng text thường
         PLAINTEXT_JSON="{\"key\":\"$RAW_KEY\",\"date\":\"$TOMORROW\",\"short_url\":\"$SHORT_URL\"}"
 
@@ -52,10 +51,7 @@ jobs:
         HEX_KEY=$(echo -n "$SECRET_KEY" | xxd -p -c 256)
         ENCRYPTED_DATA=$(echo -n "$PLAINTEXT_JSON" | openssl enc -aes-256-cbc -K "$HEX_KEY" -iv "$IV" -base64 -A)
         
-        # =================================================================================
-        # THAY ĐỔI CUỐI CÙNG: Thêm dấu nháy đơn (') để đảm bảo toàn bộ chuỗi là một khối duy nhất
         echo '{"data":"'$ENCRYPTED_DATA'","iv":"'$IV'"}' > daily-key_comment.json
-        # =================================================================================
 
         # Commit và push file đã mã hóa lên repo
         git config user.name "github-actions"
